@@ -1,0 +1,12 @@
+# picture
+*.png
+*.jpg
+*.fig
+*.eps
+*.mat
+
+# 
+*.zip
+*.rar
+*.7z
+*.tar

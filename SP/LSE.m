@@ -1,24 +1,29 @@
 function LSE
 clear all;  close all;  clc;
 % set parameters
-global t;              % threshold
-global delta;          % tolerance
+global t;                   % threshold
+global delta;               % tolerance
 t = 1;
 delta = 0.975;
 % domain
 global omega;
 global omegaX1;
 global omegaX2;
-omegaX1 = linspace(0,1,30);
-omegaX2 = linspace(0,2,60);
+height = 30;
+width = 60;
+omegaX1 = linspace(0,1,height);
+omegaX2 = linspace(0,2,width);
 [omegaX1, omegaX2] = meshgrid(omegaX1, omegaX2);
-omegaX1 = omegaX1(:);
-omegaX2 = omegaX2(:);
-omega = [omegaX1, omegaX2];
+% omegaX1 = omegaX1(:);
+% omegaX2 = omegaX2(:);
+omega = [omegaX1(:), omegaX2(:)];
+% for straddle
+global U;
+U = omega;
 % noise variance
-global sigma_noise;    % standard variance
+global sigma_noise;         % standard variance
 sigma_noise = exp(-1);
-% for selecting point
+% for selecting points
 global gamma;
 global epsilon;
 global beta;
@@ -26,25 +31,36 @@ gamma = 1e-8;
 epsilon = 1e-8;
 beta = 1.96;
 % initial sampled points
+global GP;
 idx = randperm(length(omega), 3);
 GP = zeros(size(idx,1), 3);   % 2D synthetic
 for i = 1:length(idx)
     GP(i,1:2) = omega(idx(i),:);
     GP(i,3) = f(omega(idx(i),:)) + noise(omega(idx(i),:));
+    U(i,:) = [];
 end
 % LSE
-iter = 5;
+max_iter = 20;
+iter = 20;
 while(iter>0)
     disp(iter);
     disp(size(GP,1));
-    x_plus = SelectPoint(GP);
+    % x_plus = SelectPoint(GP);
+    x_plus = Straddle(GP, max_iter-iter, width, height);
     y_plus = f(x_plus) + noise(x_plus);
     GP = [GP; x_plus, y_plus];
     disp([x_plus, y_plus]);
     iter = iter - 1;
 end
 % plot
-plotLSE();
+name = fix(clock);
+save([num2str(name(2)),'-',num2str(name(3)),'-',num2str((name(4))),'.mat'],'GP');
+% load('GP.mat','GP')
+title = 'Straddle';
+plotLSE(height, width, title);
+saveas(gca,[num2str(name(2)),'-',num2str(name(3)),'-',num2str((name(4))),'.png']);
+saveas(gca,[num2str(name(2)),'-',num2str(name(3)),'-',num2str((name(4))),'.eps']);
+saveas(gca,[num2str(name(2)),'-',num2str(name(3)),'-',num2str((name(4))),'.fig']);
 end
 %% functions utilized
 function y = f(x)
@@ -83,8 +99,9 @@ end
 end
 % conditional mean
 function mu = mean_cond(GP_local, x)
+global sigma_noise;
 mu = zeros(size(x,1),1);
-temp_K = (Kn(GP_local) + eye(size(Kn(GP_local),1)));
+temp_K = (Kn(GP_local) + sigma_noise.^2 * eye(size(Kn(GP_local),1)));
 for i=1:length(mu)
     kn = kernel_init(ones(size(GP_local,1),1)*x(i,:), GP_local(:,1:2));
     mu(i) = mean_init(x(i,:)) + kn' / temp_K * (GP_local(:,3) - mean_init(GP_local(:,1:2)));
@@ -92,8 +109,9 @@ end
 end
 % conditional kernel
 function k = kernel_cond(GP_local, x1, x2)
+global sigma_noise;
 k = zeros(size(x1,1),1);
-temp_K = (Kn(GP_local) + eye(size(Kn(GP_local),1)));
+temp_K = (Kn(GP_local) + sigma_noise.^2 * eye(size(Kn(GP_local),1)));
 for i = 1:size(k,1)
     kn1 = kernel_init(ones(size(GP_local,1),1)*x1(i,:), GP_local(:,1:2));
     kn2 = kernel_init(ones(size(GP_local,1),1)*x2(i,:), GP_local(:,1:2));
@@ -132,7 +150,7 @@ temp = temp ./ abs(kernel_cond(GP_local, omega, ones(size(omega,1),1)*x_plus));
 temp = cdf('Normal', temp, 0, 1);
 temp = sum(temp);
 end
-%% select next sample point
+%% Select next sample point
 function x_star = SelectPoint(GP_local)
 global omega;
 global delta;
@@ -141,8 +159,8 @@ global epsilon;
 global t;
 mu = mean_cond(GP_local, omega);
 sigma = kernel_cond(GP_local, omega, omega);
-mod_I = 1 - cdf('Normal', ones(length(mu),1)*(t-epsilon), mu, sigma);
-mod_I = sum(mod_I > delta);
+mod_I = cdf('Normal', ones(length(mu),1)*(t-epsilon), mu, sigma);
+mod_I = sum(mod_I <= 1 - delta);
 for i = 1:size(omega,1)
     temp_error = E(GP_local, omega(i,:)) - mod_I;
     temp_error = max(temp_error, gamma*sqrt(kernel_cond(GP_local, omega(i,:), omega(i,:))));
@@ -156,16 +174,58 @@ for i = 1:size(omega,1)
     end
 end
 end
+%% Straddle
+function x_star = Straddle(GP_local,iter, width, height)
+global t;
+global U;
+beta = Beta(GP_local, iter, width, height);
+straddle = beta * sqrt(kernel_cond(GP_local, U, U)) - abs(mean_cond(GP_local, U) - t);
+[~, idx] = max(straddle);
+x_star = U(idx,:);
+U(idx,:) = [];
+end
+% compute beta which is time-variant
+function beta = Beta(GP_local, iter, width, height)
+N = round((width+height)/10);
+recent_sample = max(size(GP_local,1)-N, 1);
+recent_sample = GP_local(1:recent_sample,3);
+beta = 0.1*log((pi*iter).^2)*var(recent_sample);
+if mod(iter,N)>=1 && mod(iter,N)<round(0.6*N)
+    beta = 0.5*beta;
+end
+end
 %% Plot
-function plotLSE()
+function plotLSE(height, width, title)
 global omega;
 global omegaX1;
 global omegaX2;
 global GP;
 figure;
+set(gcf,'outerposition',get(0,'screensize'));    % maximaze window
+suptitle(title);
 hold on;
+% ground truth contour
+subplot(1,2,1);
+hold on;
+box on;
 Z = f(omega);
-Z = reshape(Z,[length(omegaX1), length(omegaX2)]);
-contour(omegaX1, omegaX2, Z);
-plot(GP(:,1),GP(:,2),'o');
+Z = reshape(Z,[width, height]);
+[C,h] = contour(omegaX1, omegaX2, Z);
+clabel(C,h);
+plot(GP(:,1),GP(:,2),'o','MarkerFaceColor','b');
+for i=1:size(GP,1)          % mark sampling sequence number
+    text(GP(i,1)+0.02,GP(i,2)+0.02,num2str(i),'FontSize',14,'FontWeight','Bold');
+end
+% implied contour
+subplot(1,2,2);
+hold on;
+box on;
+Z = mean_cond(GP, omega);
+Z = reshape(Z,[width, height]);
+[C,h] = contour(omegaX1, omegaX2, Z);
+clabel(C,h);
+plot(GP(:,1),GP(:,2),'o','MarkerFaceColor','b');
+for i=1:size(GP,1)          % mark sampling sequence number
+    text(GP(i,1)+0.02,GP(i,2)+0.02,num2str(i),'FontSize',14,'FontWeight','Bold');
+end
 end
