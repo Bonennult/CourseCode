@@ -1,0 +1,44 @@
+
+	straddle-add 占空比0.6
+
+2-3-9-49
+	straddle-add 占空比0.5
+	
+2-3-9-55
+	straddle-add max-iter 40
+
+2-3-10-3
+	straddle-add max-iter 20
+	N = 8
+
+2-3-10-8
+	straddle-add N = 9
+
+2-3-10-13
+	straddle
+	constant beta;
+	no variance;
+
+2-3-10-18
+	straddle
+	max-iter 40
+
+2-3-10-27
+	straddle-multi
+	max-iter 20
+	N = 9
+	0.2, 0.3
+
+2-3-10-39
+	straddle-multi
+	variance in latter
+
+2-3-10-43
+	straddle-multi
+	no if in beta
+
+
+2-3-10-43
+	straddle-multi
+	max-iter 40
+

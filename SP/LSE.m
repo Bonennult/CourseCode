@@ -32,35 +32,74 @@ epsilon = 1e-8;
 beta = 1.96;
 % initial sampled points
 global GP;
-idx = randperm(length(omega), 3);
-GP = zeros(size(idx,1), 3);   % 2D synthetic
-for i = 1:length(idx)
-    GP(i,1:2) = omega(idx(i),:);
-    GP(i,3) = f(omega(idx(i),:)) + noise(omega(idx(i),:));
-    U(i,:) = [];
+global GP0;
+global GP1;
+global GP2;
+for m=1:5
+    idx = randperm(length(omega), 3);
+    GP = zeros(size(idx,1), 3);   % 2D synthetic
+    U = omega;
+    for i = 1:length(idx)
+        GP(i,1:2) = omega(idx(i),:);
+        GP(i,3) = f(omega(idx(i),:)) + noise(omega(idx(i),:));
+        U(i,:) = [];
+    end
+    % Straddle-Multi
+    max_iter = 20;
+    iter = 20;
+    while(iter>0)
+        disp(iter);
+        disp(size(GP,1));
+        % x_plus = SelectPoint(GP);
+        x_plus = Straddle(GP, max_iter-iter+1, width, height, 0);
+        y_plus = f(x_plus) + noise(x_plus);
+        GP = [GP; x_plus, y_plus];
+        disp([x_plus, y_plus]);
+        iter = iter - 1;
+    end
+    GP0 = GP;
+    % Straddle
+    U = omega;
+    for i = 1:length(idx)
+        U(i,:) = [];
+    end
+    GP = GP(1:3,:);
+    max_iter = 20;
+    iter = 20;
+    while(iter>0)
+        disp(iter);
+        disp(size(GP,1));
+        x_plus = Straddle(GP, max_iter-iter+1, width, height, 1);
+        y_plus = f(x_plus) + noise(x_plus);
+        GP = [GP; x_plus, y_plus];
+        disp([x_plus, y_plus]);
+        iter = iter - 1;
+    end
+    GP1 = GP;
+    % RMILE
+    GP = GP(1:3,:);
+    iter = 20;
+    while(iter>0)
+        disp(iter);
+        disp(size(GP,1));
+        x_plus = SelectPoint(GP);
+        y_plus = f(x_plus) + noise(x_plus);
+        GP = [GP; x_plus, y_plus];
+        disp([x_plus, y_plus]);
+        iter = iter - 1;
+    end
+    GP2 = GP;
+    % plot
+    name = fix(clock);
+    save([num2str(name(2)),'-',num2str(name(3)),'-',num2str((name(4))),'-',num2str((name(5))),'.mat'],'GP0','GP1','GP2');
+    % load('GP.mat','GP')
+    % title = 'RMILE';
+    tit = 'Straddle-Multi';
+    plotLSE(height, width, tit);
+    saveas(gca,[num2str(name(2)),'-',num2str(name(3)),'-',num2str((name(4))),'-',num2str((name(5))),'.png']);
+    saveas(gca,[num2str(name(2)),'-',num2str(name(3)),'-',num2str((name(4))),'-',num2str((name(5))),'.eps']);
+    saveas(gca,[num2str(name(2)),'-',num2str(name(3)),'-',num2str((name(4))),'-',num2str((name(5))),'.fig']);
 end
-% LSE
-max_iter = 20;
-iter = 20;
-while(iter>0)
-    disp(iter);
-    disp(size(GP,1));
-    % x_plus = SelectPoint(GP);
-    x_plus = Straddle(GP, max_iter-iter, width, height);
-    y_plus = f(x_plus) + noise(x_plus);
-    GP = [GP; x_plus, y_plus];
-    disp([x_plus, y_plus]);
-    iter = iter - 1;
-end
-% plot
-name = fix(clock);
-save([num2str(name(2)),'-',num2str(name(3)),'-',num2str((name(4))),'.mat'],'GP');
-% load('GP.mat','GP')
-title = 'Straddle';
-plotLSE(height, width, title);
-saveas(gca,[num2str(name(2)),'-',num2str(name(3)),'-',num2str((name(4))),'.png']);
-saveas(gca,[num2str(name(2)),'-',num2str(name(3)),'-',num2str((name(4))),'.eps']);
-saveas(gca,[num2str(name(2)),'-',num2str(name(3)),'-',num2str((name(4))),'.fig']);
 end
 %% functions utilized
 function y = f(x)
@@ -175,57 +214,105 @@ for i = 1:size(omega,1)
 end
 end
 %% Straddle
-function x_star = Straddle(GP_local,iter, width, height)
+function x_star = Straddle(GP_local,iter, width, height, coeff)
 global t;
 global U;
+% N = round((width+height)/10);
+N = 9;
+recent_sample = max(size(GP_local,1)-round(0.4*N), 1);
+recent_sample = GP_local(recent_sample:end,3);
 beta = Beta(GP_local, iter, width, height);
-straddle = beta * sqrt(kernel_cond(GP_local, U, U)) - abs(mean_cond(GP_local, U) - t);
+a = var(recent_sample);
+b = beta * sqrt(kernel_cond(GP_local, U, U));
+c = abs(mean_cond(GP_local, U) - t);
+disp(a(1));
+disp(b(2));
+disp(c(3));
+disp(beta);
+if coeff
+    straddle = 1.96 * sqrt(kernel_cond(GP_local, U, U)) - abs(mean_cond(GP_local, U) - t);
+else
+    straddle = beta * sqrt(kernel_cond(GP_local, U, U)) - abs(mean_cond(GP_local, U) - t)*var(recent_sample);% + var(recent_sample);
+end
 [~, idx] = max(straddle);
 x_star = U(idx,:);
 U(idx,:) = [];
 end
 % compute beta which is time-variant
 function beta = Beta(GP_local, iter, width, height)
-N = round((width+height)/10);
-recent_sample = max(size(GP_local,1)-N, 1);
-recent_sample = GP_local(1:recent_sample,3);
-beta = 0.1*log((pi*iter).^2)*var(recent_sample);
-if mod(iter,N)>=1 && mod(iter,N)<round(0.6*N)
-    beta = 0.5*beta;
-end
+%N = round((width+height)/10);
+N = 9;
+recent_sample = max(size(GP_local,1)-round(0.4*N), 1);
+recent_sample = GP_local(recent_sample:end,3);
+beta = 1.96*0.05*log((pi*iter).^2);%*var(recent_sample);
+% if mod(iter,N)>=1 && mod(iter,N)<round(0.5*N)
+%     beta = 0.3*beta;
+% end
 end
 %% Plot
-function plotLSE(height, width, title)
+function plotLSE(height, width, tit)
 global omega;
 global omegaX1;
 global omegaX2;
 global GP;
+global GP0;
+global GP1;
+global GP2;
 figure;
 set(gcf,'outerposition',get(0,'screensize'));    % maximaze window
-suptitle(title);
+% suptitle(title);
 hold on;
 % ground truth contour
-subplot(1,2,1);
+subplot(2,2,1);
+title('Ground Truth');
 hold on;
 box on;
 Z = f(omega);
 Z = reshape(Z,[width, height]);
 [C,h] = contour(omegaX1, omegaX2, Z);
 clabel(C,h);
-plot(GP(:,1),GP(:,2),'o','MarkerFaceColor','b');
-for i=1:size(GP,1)          % mark sampling sequence number
+plot(GP(1:3,1),GP(1:3,2),'o','MarkerFaceColor','b');
+for i=1:3          % mark sampling sequence number
     text(GP(i,1)+0.02,GP(i,2)+0.02,num2str(i),'FontSize',14,'FontWeight','Bold');
 end
-% implied contour
-subplot(1,2,2);
+% save('gd.mat','omega', 'Z', 'omegaX1', 'omegaX2');
+% implied contour:Straddle-Multi
+subplot(2,2,2);
+title('Straddle-Multi');
 hold on;
 box on;
-Z = mean_cond(GP, omega);
+Z = mean_cond(GP0, omega);
 Z = reshape(Z,[width, height]);
 [C,h] = contour(omegaX1, omegaX2, Z);
 clabel(C,h);
-plot(GP(:,1),GP(:,2),'o','MarkerFaceColor','b');
-for i=1:size(GP,1)          % mark sampling sequence number
-    text(GP(i,1)+0.02,GP(i,2)+0.02,num2str(i),'FontSize',14,'FontWeight','Bold');
+plot(GP0(:,1),GP0(:,2),'o','MarkerFaceColor','b');
+for i=1:size(GP0,1)          % mark sampling sequence number
+    text(GP0(i,1)+0.02,GP0(i,2)+0.02,num2str(i),'FontSize',14,'FontWeight','Bold');
+end
+% Straddle
+subplot(2,2,3);
+title('Straddle');
+hold on;
+box on;
+Z = mean_cond(GP1, omega);
+Z = reshape(Z,[width, height]);
+[C,h] = contour(omegaX1, omegaX2, Z);
+clabel(C,h);
+plot(GP1(:,1),GP1(:,2),'o','MarkerFaceColor','b');
+for i=1:size(GP1,1)          % mark sampling sequence number
+    text(GP1(i,1)+0.02,GP1(i,2)+0.02,num2str(i),'FontSize',14,'FontWeight','Bold');
+end
+% RMILE
+subplot(2,2,4);
+title('RMILE');
+hold on;
+box on;
+Z = mean_cond(GP2, omega);
+Z = reshape(Z,[width, height]);
+[C,h] = contour(omegaX1, omegaX2, Z);
+clabel(C,h);
+plot(GP2(:,1),GP2(:,2),'o','MarkerFaceColor','b');
+for i=1:size(GP2,1)          % mark sampling sequence number
+    text(GP2(i,1)+0.02,GP2(i,2)+0.02,num2str(i),'FontSize',14,'FontWeight','Bold');
 end
 end
