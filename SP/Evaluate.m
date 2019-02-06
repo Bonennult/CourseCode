@@ -7,12 +7,12 @@ width = 60;
 global sigma_noise;         % standard variance
 sigma_noise = exp(-1);
 files = dir(fullfile('.','*.mat'));
-files = files(1:end-2);
+files = files(end-3);
 for i=1:length(files)
     load(files(i).name);
     Z1 = mean_cond(GP0, omega);
     Z1 = reshape(Z1,[width, height]);
-    precision = sum(sum((Z1-t>0) .* (Z-t>0))) / sum(sum(sign(Z1-t)));  % TP/(TP+FP)
+    precision = sum(sum((Z1-t>0) .* (Z-t>0))) / sum(sum((Z1-t>0)));  % TP/(TP+FP)
     recall = sum(sum((Z1-t>0) .* (Z-t>0))) / sum(sum((Z1-t>0).*(Z-t>0) + (Z1-t<0).*(Z-t>0)));  % TP/(TP+FN)
     F1 = 2 * precision * recall / (precision + recall);
     if i==1
@@ -25,7 +25,7 @@ for i=1:length(files)
     
     Z1 = mean_cond(GP1, omega);
     Z1 = reshape(Z1,[width, height]);
-    precision = sum(sum((Z1-t>0) .* (Z-t>0))) / sum(sum(sign(Z1-t)));  % TP/(TP+FP)
+    precision = sum(sum((Z1-t>0) .* (Z-t>0))) / sum(sum((Z1-t>0)));  % TP/(TP+FP)
     recall = sum(sum((Z1-t>0) .* (Z-t>0))) / sum(sum((Z1-t>0).*(Z-t>0) + (Z1-t<0).*(Z-t>0)));  % TP/(TP+FN)
     F1 = 2 * precision * recall / (precision + recall);
     if i==1
@@ -36,7 +36,7 @@ for i=1:length(files)
     
     Z1 = mean_cond(GP2, omega);
     Z1 = reshape(Z1,[width, height]);
-    precision = sum(sum((Z1-t>0) .* (Z-t>0))) / sum(sum(sign(Z1-t)));  % TP/(TP+FP)
+    precision = sum(sum((Z1-t>0) .* (Z-t>0))) / sum(sum((Z1-t>0)));  % TP/(TP+FP)
     recall = sum(sum((Z1-t>0) .* (Z-t>0))) / sum(sum((Z1-t>0).*(Z-t>0) + (Z1-t<0).*(Z-t>0)));  % TP/(TP+FN)
     F1 = 2 * precision * recall / (precision + recall);
     if i==1
@@ -45,7 +45,7 @@ for i=1:length(files)
         result(i).RMILE = F1;
     end
 end
-save('result.mat','result');
+save('result2.mat','result');
 end
 %% initial mean function
 function mu = mean_init(x)

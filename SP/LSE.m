@@ -6,7 +6,7 @@ global delta;               % tolerance
 t = 1;
 delta = 0.975;
 % domain
-global omega;
+global omega;  
 global omegaX1;
 global omegaX2;
 height = 30;
@@ -35,7 +35,8 @@ global GP;
 global GP0;
 global GP1;
 global GP2;
-for m=1:5
+max_iter = 40;
+for m=1:1
     idx = randperm(length(omega), 3);
     GP = zeros(size(idx,1), 3);   % 2D synthetic
     U = omega;
@@ -45,11 +46,10 @@ for m=1:5
         U(i,:) = [];
     end
     % Straddle-Multi
-    max_iter = 20;
-    iter = 20;
+    iter = max_iter;
     while(iter>0)
         disp(iter);
-        disp(size(GP,1));
+%         disp(size(GP,1));
         % x_plus = SelectPoint(GP);
         x_plus = Straddle(GP, max_iter-iter+1, width, height, 0);
         y_plus = f(x_plus) + noise(x_plus);
@@ -64,11 +64,10 @@ for m=1:5
         U(i,:) = [];
     end
     GP = GP(1:3,:);
-    max_iter = 20;
-    iter = 20;
+    iter = max_iter;
     while(iter>0)
         disp(iter);
-        disp(size(GP,1));
+%         disp(size(GP,1));
         x_plus = Straddle(GP, max_iter-iter+1, width, height, 1);
         y_plus = f(x_plus) + noise(x_plus);
         GP = [GP; x_plus, y_plus];
@@ -78,10 +77,10 @@ for m=1:5
     GP1 = GP;
     % RMILE
     GP = GP(1:3,:);
-    iter = 20;
+    iter = max_iter;
     while(iter>0)
         disp(iter);
-        disp(size(GP,1));
+%         disp(size(GP,1));
         x_plus = SelectPoint(GP);
         y_plus = f(x_plus) + noise(x_plus);
         GP = [GP; x_plus, y_plus];
@@ -97,7 +96,7 @@ for m=1:5
     tit = 'Straddle-Multi';
     plotLSE(height, width, tit);
     saveas(gca,[num2str(name(2)),'-',num2str(name(3)),'-',num2str((name(4))),'-',num2str((name(5))),'.png']);
-    saveas(gca,[num2str(name(2)),'-',num2str(name(3)),'-',num2str((name(4))),'-',num2str((name(5))),'.eps']);
+    saveas(gca,[num2str(name(2)),'-',num2str(name(3)),'-',num2str((name(4))),'-',num2str((name(5))),'.eps'],'psc2');
     saveas(gca,[num2str(name(2)),'-',num2str(name(3)),'-',num2str((name(4))),'-',num2str((name(5))),'.fig']);
 end
 end
@@ -156,25 +155,6 @@ for i = 1:size(k,1)
     kn2 = kernel_init(ones(size(GP_local,1),1)*x2(i,:), GP_local(:,1:2));
     k(i) = kernel_init(x1(i,:),x2(i,:)) - kn1' / temp_K  * kn2;
 end
-% if mode == 1         % convariance matrix
-%     k = zeros(size(x1,1), size(x2,1));
-%     temp_K = (Kn(GP_local) + eye(size(Kn(GP_local))));
-%     for i = 1:size(k,1)
-%         for j = 1:size(k,2)
-%             kn1 = kernel_init(ones(size(GP_local,1),1)*x1(i,:), GP_local(:,1:2));
-%             kn2 = kernel_init(ones(size(GP_local,1),1)*x2(j,:), GP_local(:,1:2));
-%             k(i,j) = kernel_init(x1(i,:),x2(j,:)) - kn1' / temp_K  * kn2;
-%         end
-%     end
-% elseif mode == 2     % variance array
-%     k = zeros(size(x1,1),1);
-%     temp_K = (Kn(GP_local) + eye(size(Kn(GP_local))));
-%     for i = 1:size(k,1)
-%         kn1 = kernel_init(ones(size(GP_local,1),1)*x1(i,:), GP_local(:,1:2));
-%         kn2 = kernel_init(ones(size(GP_local,1),1)*x2(i,:), GP_local(:,1:2));
-%         k(i) = kernel_init(x1(i,:),x2(i,:)) - kn1' / temp_K  * kn2;
-%     end
-% end
 end
 %% Acquisition function
 function temp = E(GP_local, x_plus)
