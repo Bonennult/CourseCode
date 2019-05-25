@@ -1,9 +1,19 @@
 # picture
 *.png
 *.jpg
+*.gif
+*.bmp
+*.tif
 *.fig
 *.eps
 *.mat
+*.jpeg
+
+# video
+*.avi
+*.mp3
+*.mp4
+*.wav
 
 # 
 *.zip
@@ -11,8 +21,20 @@
 *.7z
 *.tar
 
+#
+*.pkl
+*.pth
+*.h5
+*.npy
+*.npz
+*.tfrecord*
+
 # 
 *.asv
 
 # 
 SP/2-2-20.txt
+
+#
+*checkpoint*
+*__pycache__*

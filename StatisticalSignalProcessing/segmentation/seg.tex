@@ -1,0 +1,236 @@
+\documentclass[UTF8,12pt]{ctexart}
+\usepackage{geometry}      %设置页边距
+\geometry{ left=2.5cm, right=2.5cm, top=2.5cm, bottom=2.5cm }
+\usepackage{titlesec}         %设置页眉页脚
+\usepackage{enumitem}     %设置item间距
+\usepackage{graphicx}       %插入图片
+\usepackage{subfigure}      %并排插入图片
+\usepackage{listings}          %插入代码
+\usepackage{color}
+\usepackage[usenames,svgnames]{xcolor}
+\usepackage[CJKbookmarks=true]{hyperref}   %目录超链接
+\usepackage{amsmath}      %公式对齐
+\usepackage{amssymb}
+
+\definecolor{shadecolor}{rgb}{0.91,0.91,0.91} %设置代码区背景颜色
+\setmonofont{Arial} 
+\lstset{                         %设置代码区格式
+	language=Verilog,
+	basicstyle=\small,
+	xleftmargin=2em,
+	xrightmargin=2em,
+	breaklines=true,      %自动换行
+	backgroundcolor=\color{shadecolor}
+}
+
+\title{\textbf{\Huge{统计信号处理大作业} \\[2ex] \LARGE{基于匹配的海陆分割及船体检测}}}
+\author{\\ \\ \\ 李\quad 溢 2016011235}
+\date{\today}
+
+\newpagestyle{main}{         %设置页眉和页脚
+	\setfoot{2019 Spring}{统计信号处理}{电子工程系 \quad 李溢}
+	\footrule
+}
+
+%\hypersetup{    %设置目录红框
+%	colorlinks=true,
+%	linkcolor=black
+%}
+
+
+%文档开始
+\begin{document}
+\bibliographystyle{plain}
+\pagestyle{main}
+\begin{titlepage}
+\maketitle
+\end{titlepage}
+\tableofcontents  %插入目录
+\newpage
+
+
+\section{问题描述}
+图 \ref{img_src} 为同一传感器在不同时间拍摄的某一港口地区的两幅图像。由于天气、季节等各方面原因，两幅图像的地貌观感有所不同。请利用所学知识尝试解决以下问题：
+\begin{enumerate}
+\setlength{\itemsep}{5pt}
+\setlength{\parsep}{0pt}
+\setlength{\parskip}{0pt}
+
+	\item 尝试对图像中的海面区域和陆地区域进行分割；
+	\item 对图像中的主要变化区域或目标进行检测（例如船只等）。
+\end{enumerate}
+
+\begin{figure}[!htbp]
+	\centering
+	\subfigure[]{
+		\includegraphics[width=.45\textwidth]{img/1.png}
+		\label{img_src_1}
+	}
+	\subfigure[]{
+		\includegraphics[width=.45\textwidth]{img/2.png}
+		\label{img_src_2}
+	}
+	\caption{源图像}
+	\label{img_src}
+\end{figure}
+
+
+
+\section{实现方案}
+\subsection{边缘检测预处理及分析}
+为了实现海陆分割，需要找到海陆部分的差别。首先我将两幅图像转化为灰度图，并做了边缘检测，发现\textbf{陆地部分的边缘明显更多，海面上几乎没有边缘，但是由于船体的存在，船所在位置也会有较多边缘}。
+
+为了将船体与陆地区分开来，我将两幅图的边缘检测做了\textbf{与操作}，如图 \ref{img_edge_log} 所示。由于两幅不同时刻所拍摄的图中船体位置并不同，因此与操作之后基本可以消除船体对陆地的干扰。我尝试了 Sobel、Laplacian、LoG、Canny 四种边缘检测算子，最终发现 \textbf{LoG} 算子去除船体干扰的效果最好。
+
+之后对于海陆分割和船体检测的算法都是对边缘检测的结果进行运算。
+
+\begin{figure}[!htbp]
+	\centering
+	\includegraphics[width=\textwidth]{img/and_log.eps}
+	\caption{LoG边缘检测算则}
+	\label{img_edge_log}
+\end{figure}
+
+
+\subsection{海陆分割}
+做完与操作之后，边缘几乎全部分布在陆地部分，因此接下来的工作就是根据这些离散分布的边缘点得到整个陆地区域以进行分割。
+
+此时将整个图像当作随机信号，可以认为对于边缘检测算子，陆地部分的响应为 1（H1假设），海域部分的响应为 0（H0假设）。
+
+\begin{align*}   %不带*时公式有编号
+H1: I(x,y) &= 1, (x,y) \in land \\
+H0: I(x,y) &= 0, (x,y) \in sea
+\end{align*}
+
+分割思路为
+
+\begin{enumerate}
+\setlength{\itemsep}{5pt}
+\setlength{\parsep}{0pt}
+\setlength{\parskip}{0pt}
+
+	\item 信号增强：增大陆地与海域的对比度；
+	\item 高斯平滑：消除块效应；
+	\item 海陆分割。
+\end{enumerate}
+
+\subsubsection{信号增强}
+
+这一部分的目的就是\textbf{使响应 1 较多的区域有更多的像素变成 1，响应 0 较多的区域有更多的像素变成 0，以提高两种区域的对比度}。
+
+用滑动窗选择图像中的小块，理想情况下，当前窗内像素属于陆地部分时，窗内元素全为 1，海域则全为 0。由于经过边缘检测后陆地部分只有一部分像素为 1，可以看成是有噪声干扰的信号，因此可以对窗内的元素求和，大于阈值则将当前窗判决为 H1，否则为H0。这也等效为用一个\textbf{全 1 的窗与接收到的图像信号做内积}，如果大于阈值判决为 H1，反之 H0。
+
+\begin{align*}
+\boldsymbol{I_{Window} \cdot I_{Template}} &\mathop{\gtrless}\limits_{H_0}^{H_1} \boldsymbol{T_{threshhold}} \\
+\boldsymbol{I_{Template}} &= \mathbf{1}
+\end{align*}
+
+同时参照\textbf{序贯检测}的思想，考虑到若窗口恰好跨越海岸线，则内积结果可能处于判决边界附近，为了较好的保留海岸线，我\textbf{设置了两个阈值}。当内积结果大于叫高阈值时窗内值设为 1，小于低阈值时设为 0，否则保持原像素（边缘检测结果）。
+
+经过这一增强作用之后，得到的效果如图 \ref{img_enhance} 所示，可以看出经过两次增强后基本就得到了陆地区域，但是还有一些地方有残缺。
+
+\begin{figure}[!htbp]
+	\centering
+	\subfigure[第一次增强，滑动窗口大小11*11，滑动距离3，高阈值11/3，低阈值11/5]{
+		\includegraphics[width=\textwidth]{img/seg_coarse.eps}
+		\label{img_seg_coarse}
+	}
+	\subfigure[第二次增强，滑动窗口大小21*21，滑动距离3，高阈值21*5，低阈值21]{
+		\includegraphics[width=\textwidth]{img/seg_refine.eps}
+		\label{img_seg_refine}
+	}
+	\caption{陆地增强}
+	\label{img_enhance}
+\end{figure}
+
+\subsubsection{高斯平滑}
+
+在此之后为了改善陆地的分割效果，消除那些中间的残缺块，我又做了一个\textbf{高斯平滑}，之后再用一个阈值对平滑后的图像进行二值化处理，效果如图 \ref{img_smooth} 所示，可以看出效果较好。
+
+\begin{figure}[!htbp]
+	\centering
+	\subfigure[高斯平滑结果，平滑窗21*21，$\sigma=20$]{
+		\includegraphics[width=\textwidth]{img/seg_smooth.eps}
+		\label{img_seg_smooth}
+	}
+	\subfigure[二值化结果]{
+		\includegraphics[width=\textwidth]{img/seg_area.eps}
+		\label{img_seg_area}
+	}
+	\caption{高斯平滑}
+	\label{img_smooth}
+\end{figure}
+
+\subsubsection{最终结果}
+
+最终分割结果如图 \ref{img_land} 所示。
+
+\begin{figure}[!htbp]
+	\centering
+	\includegraphics[width=\textwidth]{img/seg_land.eps}
+	\caption{海陆分割结果}
+	\label{img_land}
+\end{figure}
+
+
+
+\subsection{船体检测}
+
+船体检测的思路与海路分离类似，先对边缘检测后的图像进行增强，以提升船体信号的强度，然后进行匹配滤波，检测船体。
+
+\subsubsection{船体增强}
+
+与海陆分割中类似，不过修改了一些参数，效果如图 \ref{img_boat_enhance} 所示
+
+\begin{figure}[!htbp]
+	\centering
+	\includegraphics[width=\textwidth]{img/boat_pre.eps}
+	\caption{船体信号增强，滑动窗口大小3*3，滑动距离1，高阈值1，低阈值3/5}
+	\label{img_boat_enhance}
+\end{figure}
+
+\subsubsection{模板匹配检测}
+
+模板匹配过程中，考虑到船体位于海面上，船体本身有较多边缘响应，周围海面几乎无响应，而对于陆地则到处都是响应，因此我选择了如下形式的模板：方形窗口，中心块为 1，四周为 -1，因此对于船体有较高的正值响应，陆地区域响应则接近于 0 或者为负值，同样可以用下式表示
+
+\begin{align*}
+\boldsymbol{I_{Window} \cdot I_{Template}} \mathop{\gtrless}\limits_{H_0}^{H_1} \boldsymbol{T_{threshhold}}
+\end{align*}
+
+实验模板匹配结果如图 \ref{img_boat_match} 所示，其中模板的中心块尺寸45*45为先验观察获得，我查看源图像测得船体所占空间大概为45*45像素。
+
+\begin{figure}[!htbp]
+	\centering
+	\includegraphics[width=\textwidth]{img/boat_match_th6.eps}
+	\caption{模板匹配检测，模板尺寸81*81，中心块尺寸45*45，滑动距离3，阈值81*6}
+	\label{img_boat_match}
+\end{figure}
+
+除此之外，我尝试了不同的判决阈值，阈值较高时检测到的信号较少，因此对船体的定位较准确，但是可能会漏检一部分船体，即漏检概率比较高；阈值较低时则会检测到更多的船体，但是响应对于船体的定位则不那么准确。
+
+\subsubsection{船体分割}
+
+根据模板匹配检测后的结果定位船的位置，如图 \ref{img_boat} 所示，可以看出来还是有一部分船体漏检。
+
+\begin{figure}[!htbp]
+	\centering
+	\subfigure[]{
+		\includegraphics[width=\textwidth]{img/th_4_1.eps}
+		\label{img_boat_1}
+	}
+	\subfigure[]{
+		\includegraphics[width=\textwidth]{img/th_4_2.eps}
+		\label{img_boat_2}
+	}
+	\caption{船体分割结果}
+	\label{img_boat}
+\end{figure}
+
+
+
+\section{附录：源代码}
+注：由于LaTeX编译问题，中文部分有乱码
+\lstinputlisting{main.m}
+
+
+\end{document}

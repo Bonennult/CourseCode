@@ -1,0 +1,265 @@
+\documentclass[UTF8,12pt]{ctexart}
+\usepackage{geometry}      %设置页边距
+\geometry{ left=2.5cm, right=2.5cm, top=2.5cm, bottom=2.5cm }
+\usepackage{titlesec}         %设置页眉页脚
+\usepackage{enumitem}     %设置item间距
+\usepackage{graphicx}       %插入图片
+\usepackage{subfigure}      %并排插入图片
+\usepackage{listings}          %插入代码
+\usepackage{color}
+\usepackage{amsfonts}       %\mathbb
+\usepackage[usenames,svgnames]{xcolor}
+\usepackage[CJKbookmarks=true]{hyperref}   %目录超链接
+\usepackage[framed,numbered,autolinebreaks,useliterate]{mcode}   %插入MATLAB代码
+
+%%%%%%%%%%%%%%%%%%
+%插入伪代码
+\usepackage{algorithm}
+\usepackage{algpseudocode}
+\usepackage{amsmath}
+\renewcommand{\algorithmicrequire}{\textbf{Input:}} % Use Input in the format of Algorithm 
+\renewcommand{\algorithmicensure}{\textbf{Output:}} % Use Output in the format of Algorithm  
+%%%%%%%%%%%%%%%%%%
+
+\definecolor{shadecolor}{rgb}{0.91,0.91,0.91} %设置代码区背景颜色
+
+\title{\textbf{\Huge{统计信号处理大作业} \\[2ex] \LARGE{实验报告——应用最小二乘求解协同滤波问题}}}
+\author{\\ \\ \\ 李\quad 溢 2016011235}
+\date{\today}
+
+\newpagestyle{main}{         %设置页眉和页脚
+	\setfoot{2019 Spring}{统计信号处理}{电子工程系 \quad 李溢}
+	\footrule
+}
+
+%\hypersetup{    %设置目录红框
+%	colorlinks=true,
+%	linkcolor=black
+%}
+
+
+%文档开始
+\begin{document}
+\bibliographystyle{plain}
+\pagestyle{main}
+\begin{titlepage}
+\maketitle
+\end{titlepage}
+\tableofcontents  %插入目录
+\newpage
+
+
+\section{问题描述}
+关键词：协同滤波，填充稀疏矩阵
+
+问题的经典背景为：假设有1000 个用户和200 部电影，用户 i 对电影 j 的打分为 $M_{ij}$，因此形成了一个 100x200 的评分矩阵 M，由于每个用户不一定对所有电影都打过分，因此矩阵 M 不会被完全填充。所要解决的问题就是填充矩阵。
+
+
+\section{问题建模}
+
+实验中已知稀疏矩阵 $M \in \mathbb{R}^{N \times S}$，假设满足 $M=UV^T$， 其中 $M_{ij}=U(i,: )V(j, :)^T$，$U \in \mathbb{R}^{N \times rank}$，$V \in \mathbb{R}^{S \times rank}$，$rank << N, S$ 为一个常数，可近似看作 U、V 的秩。假设矩阵 M 低秩，由于矩阵的秩为矩阵奇异值向量的 0 范数，可将其放缩为 1 范数，即矩阵的核范数。矩阵的核范数满足
+$$
+\|\mathbf{X}\|_{*}=\min _{\mathbf{U}, \mathbf{V} | \mathbf{X}=\mathbf{U V}^{T}} \frac{1}{2}\left(\|\mathbf{U}\|_{F}^{2}+\|\mathbf{V}\|_{F}^{2}\right)
+$$
+因此将上述问题转化为优化以下目标函数进行求解
+$$
+\min _{\mathbf{U}, \mathbf{V}}\left\|\mathbf{W} *\left(\mathbf{M}-\mathbf{U V}^{T}\right)\right\|_{F}^{2}+\frac{\lambda}{2}\left(\|\mathbf{U}\|_{F}^{2}+\|\mathbf{V}\|_{F}^{2}\right)
+$$
+其中 $\lambda$ 是控制矩阵低秩程度的超参数，$W$ 是标志矩阵，$W(i,j) = 1$ 表示 $M_{ij} \ne 0$，* 表示矩阵对应元素相乘。
+
+
+\section{求解算法}
+
+\subsection{ALS交替最小二乘}
+
+\subsubsection{优化目标}
+考虑优化如下目标函数
+$$
+\mathbf{L}(\mathbf{U}, \mathbf{V})=\sum_{M_{xi} \ne 0}\left(\mathbf{M}_{\mathbf{x} \mathbf{i}}-\mathbf{U}_{\mathbf{x} :} \mathbf{V}_{\mathbf{i} :}^{\mathbf{T}}\right)^{2} + \lambda\left(\left|\mathbf{U}_{\mathbf{x}}\right|^{2}+\left|\mathbf{V}_{\mathbf{i}}\right|^{2}\right)
+$$
+其中 $U_{x:}$ 表示 U 的第 x 行，$V_{i:}$ 表示 V 的第 i 行，$M_{xi}$ 表示用户 x 对用户 i 的评分。最后一项为正则化项。
+
+\subsubsection{最小二乘闭式解}
+先对 $U_{x:}$ 应用最小二乘
+\begin{equation}
+\label{equ:gradU}
+\frac{\partial \mathrm{L}}{\partial \mathrm{U}_{\mathrm{x:}}}=2 \mathrm{V}^{\mathrm{T}}\left(\mathrm{V} \mathrm{U}_{\mathrm{x}}^{\mathrm{T}}-\mathrm{M}_{\mathrm{x}}^{\mathrm{T}}\right)+2 \lambda \mathrm{U}_{\mathrm{x}}^{\mathrm{T}}
+\end{equation}
+令其等于0，求出
+\begin{equation}
+\label{equ:alsU}
+\mathrm{U}_{\mathrm{x}}^{\mathrm{T}}=\left(\mathrm{V}^{\mathrm{T}} \mathrm{V}+\lambda \mathrm{I}\right)^{-1} \mathrm{V}^{\mathrm{T}} \mathrm{M}_{\mathrm{x} :}^{\mathrm{T}}
+\end{equation}
+同理，对 $V_{i:}$ 应用最小二乘，得到
+\begin{equation}
+\label{equ:gradV}
+\frac{\partial \mathrm{L}}{\partial \mathrm{V}_{\mathrm{i}}}=2 \mathrm{U}^{\mathrm{T}}\left(\mathrm{U} \mathrm{V}_{\mathrm{i}}^{\mathrm{T}}-\mathrm{M}_{\mathrm{i}}\right)+2 \lambda \mathrm{V}_{\mathrm{i} :}^{\mathrm{T}}=0
+\end{equation}
+
+\begin{equation}
+\label{equ:alsV}
+\mathrm{V}_{\mathrm{i}}^{\mathrm{T}}=\left(\mathrm{U}^{\mathrm{T}} \mathrm{U}+\lambda \mathrm{I}\right)^{-1} \mathrm{U}^{\mathrm{T}} \mathrm{M}_{ : \mathrm{i}}
+\end{equation}
+
+\subsubsection{迭代求解}
+每次先固定 V 求解 U，再固定 U 求解 V，这样交替进行优化，算法伪代码如下
+%%%%%%%%%%%%%%
+\begin{algorithm}[htb]
+\caption{ALS协同滤波}
+\label{alg:ALS}
+\begin{algorithmic}
+	\Require
+	$M \in \mathbb{R}^{N \times S}$, $\lambda$, 
+	\Ensure
+	$X = UV^T$, $U \in \mathbb{R}^{N \times rank}$, $V \in \mathbb{R}^{S \times rank}$, $rank << N, S$ \\
+		random initialization of U and V
+		\For{step < max step} \\
+		\qquad $\mathrm{U}^{\mathrm{T}}=\left(\mathrm{V}^{\mathrm{T}} \mathrm{V}+\lambda \mathrm{I}\right)^{-1} \mathrm{V}^{\mathrm{T}} \mathrm{M}^{\mathrm{T}}$ \\
+		\qquad $\mathrm{V}^{\mathrm{T}}=\left(\mathrm{U}^{\mathrm{T}} \mathrm{U}+\lambda \mathrm{I}\right)^{-1} \mathrm{U}^{\mathrm{T}} \mathrm{M}$
+		\EndFor
+\end{algorithmic}
+\end{algorithm}
+%%%%%%%%%%%%%%
+
+\subsubsection{实验结果}
+算法收敛时间大概为 1 min，超参数主要是特征的数量 rank 和 $\lambda$。
+
+首先我固定 $\lambda=10$，尝试了不同的 rank，计算在测试集上的 mse
+
+\begin{table}[!htbp]
+\centering
+\begin{tabular}{|l|l|l|l|}
+\hline
+rank($\lambda$=10) & 10 & 30 & 100 \\ \hline
+train mse & 88.2968 & 71.5975 & 40.3695 \\ \hline
+test mse & 98.635 & 105.2446 & 142.0029 \\ \hline
+\end{tabular}
+\caption{rank对ALS算法结果的影响}
+\end{table}
+
+由此看来并不是特征的数量 rank 越大越好，rank 过大时很可能在训练集上产生了过拟合。
+
+然后我固定 rank=10，取不同的 $\lambda$ 值，计算在测试集上的 mse
+
+\begin{table}[!htbp]
+\centering
+\begin{tabular}{|l|l|l|l|l|l|l|}
+\hline
+$\lambda$(rank=10) & 0.1 & 1 & 10 & 100 & 500 & 1000 \\ \hline
+mse & 96.824 & 96.8548 & 97.3392 & 102.6232 & 131.8353 & 154.6974 \\ \hline
+\end{tabular}
+\caption{$\lambda$对ALS算法结果的影响}
+\end{table}
+
+因此 $\lambda \le 100$ 时的值对优化实际影响并不大，增大后优化效果下降。查看后我发现 $\lambda = 100$ 时 $U^T U$ 与 $V^T V$ 对角线元素的平均值大约在 350，此时式 \ref{equ:alsU} 和 \ref{equ:alsV} 中 $\lambda I$ 一项对于 U、V 的解影响不大。当 $\lambda = 1000$ 时，其对角元素平均值大约在 100。因此可以确认 $\lambda$ 影响了 U、V 的低秩程度，当 $\lambda$ 过大时，U、V的秩偏少，不足以表征 M 对应的用户和电影的特点，因此优化效果变差。
+
+注：实际实验中，最大迭代次数设为1000。迭代终止条件除了最大的迭代次数，我还增加了一个 loss 的变化幅度，当 $abs(lossLast - lossNew) / lossNew < \epsilon$ 时也会停止迭代。其中 $\epsilon$ 也是引入的另一个超参数，不过由于实际实验中迭代时 U 和 V 的更新幅度越到后来越小，因此这一参数的影响并不很大，实验中我取 $\epsilon=1e-7$
+
+
+\subsection{基于梯度下降的协同滤波}
+
+\subsubsection{前述ALS算法的问题}
+根据上面基于 ALS 算法的结果，可以看到测试集上的 mse 数值在 100 左右，也就意味着平均预测值与真值的误差约为 10，而经过计算，实际测试数据的均值约为 13，这意味着实际上 ALS 算法得到的结果中，在测试数据对应的点上的预测值基本为 0。这并不意外，因为 ALS 的算法推导中存在一定的问题。
+
+我们首先考虑式 \ref{equ:gradU} 和 \ref{equ:gradV}，真正的推导过程应为
+\begin{equation}
+\label{equ:truegradU}
+\frac{\partial \mathrm{L}}{\partial \mathrm{U}_{\mathrm{x}}}=2 \sum_{\mathrm{i}, \mathrm{M}_{\mathrm{xi}} \neq 0} V_{i :}^{T}\left(\mathrm{V}_{\mathrm{i} :} \mathrm{U}_{\mathrm{x} :}^{\mathrm{T}}-\mathrm{M}_{\mathrm{xi}}\right)+2 \lambda \mathrm{U}_{\mathrm{x}}^{\mathrm{T}} \neq 2 \mathrm{V}^{\mathrm{T}}\left(\mathrm{V} \mathrm{U}_{\mathrm{x}}^{\mathrm{T}}-\mathrm{M}_{\mathrm{x}}^{\mathrm{T}}\right)+2 \lambda \mathrm{U}_{\mathrm{x}}^{\mathrm{T}}
+\end{equation}
+
+需要注意的是，这里只取了 $\{i |  M_{xi} \ne 0\}$ 这一部分的 i 来计算关于 $U_x$  的梯度，严格来说不能化成式子 \ref{equ:gradU} 中的矩阵表达形式，因为式 \ref{equ:gradU} 中实际上相当于把原来没有观测数据的 $M_{xi}$  完全看作了 0，也即\textbf{认为这些点有观测数据，但是观测数据就等于 0}，由此优化出来的 U、V 必然是不对的，因为优化之后在这些点上的预测时会很接近于 0。
+
+\subsubsection{基于梯度下降的优化算法}
+仍旧考虑优化以下目标函数进行求解
+\begin{equation}
+\label{equ:loss}
+L(U,V) = \min _{\mathbf{U}, \mathbf{V}}\left\|\mathbf{W} *\left(\mathbf{M}-\mathbf{U V}^{T}\right)\right\|_{F}^{2}+\frac{\lambda}{2}\left(\|\mathbf{U}\|_{F}^{2}+\|\mathbf{V}\|_{F}^{2}\right)
+\end{equation}
+
+而前述ALS的问题实际上就在于计算梯度的过程中忽略了标志矩阵 W 及对应的点乘操作。如果保留矩阵 W，将式 \ref{equ:loss} 分别对 U 和 V 求导，得到
+\begin{equation}
+\frac{\partial \mathrm{L}}{\partial \mathrm{U}}=2\left(\mathrm{W} *\left(U V^{T}-M\right)\right) \mathrm{V}+\lambda \mathrm{U}
+\end{equation}
+\begin{equation}
+\frac{\partial \mathrm{L}}{\partial \mathrm{V}}=2 \mathrm{U}^{\mathrm{T}}\left(\mathrm{W} *\left(U V^{T}-M\right)\right)+\lambda \mathrm{V}
+\end{equation}
+
+很容易验证，如果将上式中的 W 忽略后，就与前面推导的式 \ref{equ:gradU}、\ref{equ:gradV} 等价，但是实际上 W 并不能忽略，也不能直接分配到括号里边。上面两个式子并不能求出关于 U、V 的闭式解，因此不能直接应用最小二乘法，可以考虑应用梯度下降法优化目标函数。
+
+\subsubsection{梯度下降求解}
+每次基于 L 对 U 和 V 的梯度分别更新 U 和 V，交替进行优化，算法伪代码如下
+%%%%%%%%%%%%%%
+\begin{algorithm}[htb]
+\caption{基于梯度下降的协同滤波}
+\label{alg:Gradient Descendent}
+\begin{algorithmic}
+	\Require
+	$M \in \mathbb{R}^{N \times S}$, $\lambda$, lr(learning rate) 
+	\Ensure
+	$X = UV^T$, $U \in \mathbb{R}^{N \times rank}$, $V \in \mathbb{R}^{S \times rank}$, $rank << N, S$\\
+		random initialization of U and V
+		\For{step < max step} \\
+		\qquad $\frac{\partial \mathrm{L}}{\partial \mathrm{U}}=2\left(\mathrm{W} *\left(U V^{T}-M\right)\right) \mathrm{V}+\lambda \mathrm{U}$ \\
+		\qquad $U = U - lr * \frac{\partial \mathrm{L}}{\partial \mathrm{U}}$ \\
+		\qquad $\frac{\partial \mathrm{L}}{\partial \mathrm{V}}=2 \mathrm{U}^{\mathrm{T}}\left(\mathrm{W} *\left(U V^{T}-M\right)\right)+\lambda \mathrm{V}$ \\
+		\qquad $V = V - lr * \frac{\partial \mathrm{L}}{\partial \mathrm{V}}$
+		\EndFor
+\end{algorithmic}
+\end{algorithm}
+%%%%%%%%%%%%%%
+
+\subsubsection{实验结果}
+
+与ALS相似，特征数目 rank 过大时会出现严重的过拟合，因此最终取 rank=10，$\lambda=10$，梯度下降法中主要影响因素为学习率 lr 的调整。总的来说，实验中 lr>0.0002 时基本很快就会爆炸，即不收敛；lr 过小时优化速度太慢。最终我采用了阶梯衰减的学习率调整方案
+
+\begin{table}[!htbp]
+\centering
+\begin{tabular}{|l|l|l|l|l|}
+\hline
+step & 0-12 & 13-30 & 31-240 & 241-1000 \\ \hline
+lr & 0.0002 & 0.00015 & 0.00013 & 0.00011 \\ \hline
+\end{tabular}
+\caption{学习率衰减}
+\end{table}
+
+\begin{figure}[!htbp]
+	\centering
+	\includegraphics[width=\textwidth]{lr.eps}
+	\caption{学习率衰减方案}
+	\label{img:lr}
+\end{figure}
+
+\begin{figure}[!htbp]
+	\centering
+	\includegraphics[width=\textwidth]{loss.eps}
+	\caption{梯度下降}
+	\label{img:loss}
+\end{figure}
+
+实验中任何一个超参数的改变都需要对学习率衰减进行调整，当 $\lambda$ 或 rank 较大时就需要调小 lr，因为此时梯度值较大，如果 lr 太大就会不收敛，衰减的区间也需要对应调整，最终的结果基本上是我针对 $\lambda$、rank、lr 等参数精细调整过的，也是实验中取得的最好的效果。最终效果如下，可以看到 mse 只有 8，平均每个观测数据的误差为 3 左右，而观测数据的真实平均值约为 13 左右，因此相对较准确，相比于之前的 ALS 算法则有很大的提升。
+
+\begin{table}[!htbp]
+\centering
+\begin{tabular}{|c|c|c|c|c|}
+\hline
+rank & $\lambda$ & train mse & test mse & 收敛时间 \\ \hline
+10 & 10 & 4.4583 & 8.8111 & $\sim$ 1 min \\ \hline
+\end{tabular}
+\caption{梯度下降算法结果}
+\end{table}
+
+除此之外，与上面相同，迭代终止条件除了最大迭代次数，我还增加了一个loss减小的幅度 $\epsilon = 1e-5$。
+
+
+\section{附录：源代码}
+注：由于编码问题，部分中文注释存在乱码
+\subsection{ALS算法}
+\lstinputlisting{als.m}
+
+\subsection{梯度下降算法}
+\lstinputlisting{gd.m}
+
+
+
+
+\end{document}
