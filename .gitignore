@@ -38,3 +38,7 @@ SP/2-2-20.txt
 #
 *checkpoint*
 *__pycache__*
+
+# don't ignore
+! ./uav-course/findPath/images/*
+
