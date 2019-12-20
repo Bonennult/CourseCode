@@ -40,5 +40,5 @@ SP/2-2-20.txt
 *__pycache__*
 
 # don't ignore
-! ./uav-course/findPath/images/*
+#! ./uav-course/findPath/images/*
 
